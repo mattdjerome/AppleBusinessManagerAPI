@@ -36,7 +36,23 @@ base_url = f'https://api-{scope}.apple.com'
 
 session = requests.Session()
 session.headers.update({'Accept': 'application/json'})
+out_filename = '/Users/mjerome/Desktop/output_test.csv'
+# If you prefer a different path, change out_filename variable.
 
+# CSV fieldnames (consistent keys)
+fieldnames = [
+    'SerialNumber',
+    'Model',
+    'OrderDateTime',
+    'AppleCareDescription',
+    'AppleCareStartDateTime',
+    'AppleCareEndDateTime',
+]
+# Create the CSV
+with open(out_filename, 'w', newline='') as csvfile:
+    writer = csv.writer(csvfile)
+    writer.writerow(f'{fieldnames}')# <-- write a single header row
+    
 # ----- Helpers -----
 def now_iso_for_filename():
     return datetime.now().strftime("%Y%m%dT%H%M%S")
@@ -118,7 +134,7 @@ def get(url, max_retries=3):
     while True:
         attempt += 1
         try:
-            resp = session.get(url, timeout=60)
+            resp = session.get(url, timeout=30)
         except Exception as e:
             if attempt >= max_retries:
                 raise
@@ -180,15 +196,15 @@ def get_objects(url):
             # links may be "", [], None, etc. -> stop pagination
             url = None
 
-def export_csv_stream(filename, fieldnames, row_iterable):
-    """
-    Open CSV once, write header, stream rows from an iterable of dicts.
-    """
-    with open(filename, 'w', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
-        writer.writeheader()
-        for row in row_iterable:
-            writer.writerow(row)
+#def export_csv_stream(filename, fieldnames, row_iterable):
+#   """
+#   Open CSV once, write header, stream rows from an iterable of dicts.
+#   """
+#   with open(filename, 'w', newline='') as f:
+#       writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
+#       writer.writeheader()
+#       for row in row_iterable:
+#           writer.writerow(row)
 
 # ----- Main flow -----
 def main():
@@ -199,19 +215,7 @@ def main():
     token = get_token()
     session.headers.update({'Authorization': f'Bearer {token}'})
 
-    out_filename = f'/Users/{getpass_user()}/Desktop/abm_api_output_{now_iso_for_filename()}.csv'
-    # If you prefer a different path, change out_filename variable.
-
-    # CSV fieldnames (consistent keys)
-    fieldnames = [
-        'SerialNumber',
-        'Model',
-        'OrderDateTime',
-        'AppleCareDescription',
-        'AppleCareStartDateTime',
-        'AppleCareEndDateTime',
-    ]
-
+        
     def rows_generator():
         counter = 1
         # paginate devices
@@ -226,7 +230,7 @@ def main():
 
             # For each device fetch appleCareCoverage - handle endpoints that may return non-dict `links`
             try:
-                for coverage in get_objects(f'/v1/orgDevices/{dev_id}/appleCareCoverage'):
+                for coverage in get_objects(f'/v1/orgDevices/{dev_id}/appleCareCoverage?limit=1000'):
                     # coverage may be missing attributes
                     cov_attrs = coverage.get('attributes') or {}
                     desc = cov_attrs.get('description', '')
@@ -243,19 +247,28 @@ def main():
                         'AppleCareStartDateTime': start,
                         'AppleCareEndDateTime': end
                     }
+
+#                   with open(out_filename, 'w', newline='') as csvfile:
+#                   writer = csv.writer(csvfile)
+#                       writer.writerow([dev_id, desc, order_dt, start, end])# <-- write a single header row
+                            
+                except Exception as e:
+                    print(f"Failed writing CSV: {e}")
             except Exception as e:
                 # Keep going; log device id for debugging
                 print(f"UNKNOWN ERROR while processing device {dev_id}: {e}")
 
             counter += 1
-
+            try:
+                with open(out_filename, 'w', newline='') as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerow([dev_id, desc, order_dt, start, end])# <-- write a single header row
+                    
+            except Exception as e:
+                print(f"Failed writing CSV: {e}")
+                
     # write CSV streaming rows (header once)
-    try:
-        export_csv_stream(out_filename, fieldnames, rows_generator())
-        print(f"Wrote output to: {out_filename}")
-    except Exception as e:
-        print(f"Failed writing CSV: {e}")
-
+    
     end_ts = datetime.now()
     delta = end_ts - start_ts
     minutes = int(delta.total_seconds() // 60)
