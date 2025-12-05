@@ -17,7 +17,8 @@ scope = 'business'  # or 'school'
 private_key_file = sys.argv[3]
 client_id = sys.argv[1]
 key_id = sys.argv[2]
-
+fileOutputPath = sys.argv[4]
+fileOutput = f'{fileOutputPath}/apple_care_coverage_{start_time_hh_mm}'
 base_url = f'https://api-{scope}.apple.com'
 session = requests.Session()  # always use a session for better performance.
 
@@ -29,6 +30,7 @@ def main():
     for device in get_objects('/v1/orgDevices'):
         serial = device['id']
         model = device['attributes'].get('deviceModel', '')
+        orderDate = device['attributes']['orderDateTime']
         # Default values
         applecare_desc = ''
         applecare_start = ''
@@ -45,22 +47,26 @@ def main():
             'SerialNumber': serial,
             'Model': model,
             'AppleCareDescription': applecare_desc,
+            'orderDateTime': orderDate,
             'AppleCarestartDateTime': applecare_start,
             'AppleCareEndDateTime': applecare_end
         }
         rows.append(row)
-        print(counter, serial, model, applecare_desc, applecare_end)
+        print(counter, serial, model, orderDate, applecare_desc, applecare_end)
         counter += 1
 
     # Write all rows at once
-    fieldnames = ['SerialNumber', 'Model', 'AppleCareDescription', 'AppleCareStartDateTime', 'AppleCareEndDateTime']
-    export_csv('all_devices.csv', rows, fieldnames)
+    fieldnames = ['SerialNumber', 'Model', 'OrderDate', 'AppleCareDescription', 'AppleCareStartDateTime', 'AppleCareEndDateTime']
+    export_csv(fileOutput, rows, fieldnames)
 
     # Print end time and duration
-    now = datetime.now()
-    end_time_hh_mm = now.strftime("%H:%M")
-    print(f"End Time: {end_time_hh_mm}")
-
+    end_ts = datetime.now()
+    delta = end_ts - start_ts
+    minutes = int(delta.total_seconds() // 60)
+    seconds = int(delta.total_seconds() % 60)
+    print(f"End Time: {end_ts.isoformat(sep=' ', timespec='seconds')}")
+    print(f"Total Run Time: {minutes} minutes {seconds} seconds")
+    
 def get_objects(url):
     while url:
         response = get(url)
